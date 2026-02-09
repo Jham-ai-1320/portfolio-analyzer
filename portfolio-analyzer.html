@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invest Like A Billionaire - Portfolio Analyzer</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+            min-height: 100vh;
+        }
+        
+        .card-shadow {
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .input-focus:focus {
+            outline: none;
+            border-color: #D4AF37;
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.3);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 350px;
+            margin: 20px 0;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.6s ease-out;
+        }
+        
+        .bg-card {
+            background-color: rgba(30, 58, 138, 0.4);
+            backdrop-filter: blur(10px);
+        }
+        
+        .bg-gold {
+            background-color: #D4AF37;
+        }
+        
+        .text-gold {
+            color: #D4AF37;
+        }
+        
+        .border-gold {
+            border-color: #D4AF37;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Invest Like A Billionaire Portfolio allocations by net worth
+        const ALLOCATION_BY_NET_WORTH = {
+            '1m-5m': {
+                'Cash': 10,
+                'Bonds': 15,
+                'Public Equities': 35,
+                'Private Real Estate': 30,
+                'Private Credit': 5,
+                'Natural Resources': 5,
+                'Private Equity/VC': 0,
+                'Direct Real Estate': 0,
+                'Operating Business': 0,
+                'Other': 0
+            },
+            '5m-10m': {
+                'Cash': 10,
+                'Bonds': 10,
+                'Public Equities': 30,
+                'Private Real Estate': 25,
+                'Private Credit': 10,
+                'Natural Resources': 10,
+                'Private Equity/VC': 5,
+                'Direct Real Estate': 0,
+                'Operating Business': 0,
+                'Other': 0
+            },
+            '10m+': {
+                'Cash': 5,
+                'Bonds': 5,
+                'Public Equities': 20,
+                'Private Real Estate': 20,
+                'Private Credit': 15,
+                'Natural Resources': 15,
+                'Private Equity/VC': 20,
+                'Direct Real Estate': 0,
+                'Operating Business': 0,
+                'Other': 0
+            }
+        };
+
+        const CATEGORY_COLORS = {
+            'Cash': '#FFD700',
+            'Bonds': '#B8860B',
+            'Public Equities': '#DAA520',
+            'Private Real Estate': '#CD853F',
+            'Private Credit': '#D4AF37',
+            'Natural Resources': '#8B7355',
+            'Private Equity/VC': '#F0E68C',
+            'Direct Real Estate': '#DEB887',
+            'Operating Business': '#C19A6B',
+            'Other': '#A0826D'
+        };
+
+        function PortfolioAnalyzer() {
+            const [step, setStep] = useState(1);
+            const [netWorthRange, setNetWorthRange] = useState('');
+            const [monthlyExpenses, setMonthlyExpenses] = useState('');
+            const [creditLineAvailable, setCreditLineAvailable] = useState('');
+            const [emergencyMonths, setEmergencyMonths] = useState('6');
+            
+            const [portfolio, setPortfolio] = useState({
+                'Cash': '',
+                'Bonds': '',
+                'Public Equities': '',
+                'Private Real Estate': '',
+                'Private Credit': '',
+                'Natural Resources': '',
+                'Private Equity/VC': '',
+                'Direct Real Estate': '',
+                'Operating Business': '',
+                'Other': ''
+            });
+            
+            const [aiRecommendations, setAiRecommendations] = useState('');
+            const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+            
+            const currentChartRef = useRef(null);
+            const idealChartRef = useRef(null);
+            const currentChartInstance = useRef(null);
+            const idealChartInstance = useRef(null);
+
+            const getIdealAllocation = () => {
+                return ALLOCATION_BY_NET_WORTH[netWorthRange] || ALLOCATION_BY_NET_WORTH['1m-5m'];
+            };
+
+            const calculateRequiredCash = () => {
+                const expenses = parseFloat(monthlyExpenses) || 0;
+                const months = parseFloat(emergencyMonths) || 6;
+                const creditLine = parseFloat(creditLineAvailable) || 0;
+                const requiredCash = (expenses * months) - creditLine;
+                return Math.max(0, requiredCash);
+            };
+
+            const handleInputChange = (category, value) => {
+                setPortfolio(prev => ({
+                    ...prev,
+                    [category]: value
+                }));
+            };
+
+            const calculateTotalValue = () => {
+                return Object.values(portfolio).reduce((sum, val) => {
+                    return sum + (parseFloat(val) || 0);
+                }, 0);
+            };
+
+            const getCurrentAllocation = () => {
+                const total = calculateTotalValue();
+                if (total === 0) return {};
+                
+                const allocation = {};
+                Object.entries(portfolio).forEach(([category, value]) => {
+                    const numValue = parseFloat(value) || 0;
+                    allocation[category] = (numValue / total) * 100;
+                });
+                return allocation;
+            };
+
+            const calculateDifferences = () => {
+                const current = getCurrentAllocation();
+                const ideal = getIdealAllocation();
+                const differences = {};
+                
+                Object.keys(ideal).forEach(category => {
+                    const currentPct = current[category] || 0;
+                    const idealPct = ideal[category];
+                    differences[category] = currentPct - idealPct;
+                });
+                
+                return differences;
+            };
+
+            const getRecommendedAmounts = () => {
+                const total = calculateTotalValue();
+                const ideal = getIdealAllocation();
+                const recommendations = {};
+                
+                Object.entries(ideal).forEach(([category, percentage]) => {
+                    const idealAmount = (total * percentage) / 100;
+                    const currentAmount = parseFloat(portfolio[category]) || 0;
+                    recommendations[category] = {
+                        ideal: idealAmount,
+                        current: currentAmount,
+                        difference: idealAmount - currentAmount
+                    };
+                });
+                
+                return recommendations;
+            };
+
+            const createPieChart = (canvasRef, data, title) => {
+                if (!canvasRef.current) return null;
+
+                const ctx = canvasRef.current.getContext('2d');
+                
+                const labels = Object.keys(data).filter(key => data[key] > 0);
+                const values = labels.map(key => data[key]);
+                const colors = labels.map(label => CATEGORY_COLORS[label]);
+
+                return new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: colors,
+                            borderWidth: 3,
+                            borderColor: 'rgba(30, 58, 138, 0.8)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    padding: 15,
+                                    font: {
+                                        size: 11,
+                                        family: 'Inter',
+                                        weight: 500
+                                    },
+                                    color: '#ffffff'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: title,
+                                font: {
+                                    size: 18,
+                                    weight: 'bold',
+                                    family: 'Inter'
+                                },
+                                padding: 20,
+                                color: '#D4AF37'
+                            },
+                            tooltip: {
+                                backgroundColor: '#1e3a8a',
+                                titleColor: '#D4AF37',
+                                bodyColor: '#ffffff',
+                                borderColor: '#D4AF37',
+                                borderWidth: 2,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.parsed || 0;
+                                        return `${label}: ${value.toFixed(1)}%`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            };
+
+            const proceedToPortfolioInput = () => {
+                if (!netWorthRange) {
+                    alert('Please select your net worth range.');
+                    return;
+                }
+                if (!monthlyExpenses) {
+                    alert('Please enter your monthly expenses.');
+                    return;
+                }
+                setStep(2);
+            };
+
+            const analyzePortfolio = () => {
+                const total = calculateTotalValue();
+                if (total === 0) {
+                    alert('Please enter at least one investment amount.');
+                    return;
+                }
+                setStep(3);
+            };
+
+            const generateAIRecommendations = async () => {
+                setIsGeneratingAI(true);
+                
+                const total = calculateTotalValue();
+                const current = getCurrentAllocation();
+                const ideal = getIdealAllocation();
+                const differences = calculateDifferences();
+                const recommended = getRecommendedAmounts();
+                const requiredCash = calculateRequiredCash();
+                const currentCash = parseFloat(portfolio['Cash']) || 0;
+                
+                const netWorthLabel = {
+                    '1m-5m': '$1M-$5M',
+                    '5m-10m': '$5M-$10M',
+                    '10m+': '$10M+'
+                }[netWorthRange];
+                
+                let prompt = `You are a financial portfolio advisor analyzing an investor's portfolio using the "Invest Like A Billionaire" framework by Bob and Ben Fraser.
+
+INVESTOR PROFILE:
+- Net Worth Range: ${netWorthLabel}
+- Monthly Expenses: $${parseFloat(monthlyExpenses).toLocaleString()}
+- Emergency Fund Target: ${emergencyMonths} months
+- Available Credit Lines: $${parseFloat(creditLineAvailable || 0).toLocaleString()}
+- Calculated Cash Need: $${Math.round(requiredCash).toLocaleString()}
+- Current Cash Position: $${Math.round(currentCash).toLocaleString()}
+
+CURRENT PORTFOLIO (Total: $${total.toLocaleString()}):
+${Object.entries(portfolio).filter(([cat, val]) => parseFloat(val) > 0).map(([cat, val]) => {
+    const amount = parseFloat(val) || 0;
+    const pct = current[cat] || 0;
+    return `- ${cat}: $${amount.toLocaleString()} (${pct.toFixed(1)}%)`;
+}).join('\n')}
+
+TARGET ALLOCATION (ILAB Model for ${netWorthLabel}):
+${Object.entries(ideal).filter(([cat, pct]) => pct > 0).map(([cat, pct]) => `- ${cat}: ${pct}%`).join('\n')}
+
+REBALANCING ANALYSIS:
+${Object.entries(recommended).filter(([cat, vals]) => ideal[cat] > 0).map(([cat, vals]) => {
+    const diff = vals.difference;
+    const sign = diff > 0 ? '+' : '';
+    return `- ${cat}: ${sign}$${Math.round(diff).toLocaleString()} (${sign}${differences[cat].toFixed(1)}%)`;
+}).join('\n')}
+
+Please provide:
+1. LIQUIDITY ASSESSMENT: Evaluate if their cash position meets their emergency fund needs given their credit lines
+2. PORTFOLIO OVERVIEW: Brief analysis of current allocation vs ILAB model for their net worth range
+3. SPECIFIC REBALANCING STEPS: Concrete dollar amounts to move (e.g., "Add $50,000 to Private Credit from Public Equities")
+4. RISK WARNINGS: Alert them to any concerning over/under allocations, especially around illiquid alternatives
+5. STRATEGIC GUIDANCE: How to think about their allocation given their net worth stage
+6. NEXT STEPS: Practical actions they can take
+
+Keep your response clear, actionable, and educational. This is optimization guidance toward the ILAB model, not direct investment advice.`;
+
+                try {
+                    // OPTION 1: Anthropic Claude API
+                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': 'YOUR_ANTHROPIC_API_KEY_HERE', // Get from console.anthropic.com
+                            'anthropic-version': '2023-06-01'
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-sonnet-4-20250514',
+                            max_tokens: 1500,
+                            messages: [
+                                { role: 'user', content: prompt }
+                            ]
+                        })
+                    });
+
+                    const data = await response.json();
+                    const aiText = data.content.find(item => item.type === 'text')?.text || 'Unable to generate recommendations.';
+                    setAiRecommendations(aiText);
+                    
+                    /* OPTION 2: OpenAI ChatGPT API (uncomment to use instead)
+                    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer YOUR_OPENAI_API_KEY_HERE' // Get from platform.openai.com
+                        },
+                        body: JSON.stringify({
+                            model: 'gpt-4',
+                            messages: [
+                                { role: 'user', content: prompt }
+                            ],
+                            max_tokens: 1500
+                        })
+                    });
+
+                    const data = await response.json();
+                    const aiText = data.choices[0].message.content || 'Unable to generate recommendations.';
+                    setAiRecommendations(aiText);
+                    */
+                } catch (error) {
+                    setAiRecommendations('Sorry, I encountered an error generating recommendations. Please try again.');
+                    console.error('AI Error:', error);
+                }
+                
+                setIsGeneratingAI(false);
+            };
+
+            useEffect(() => {
+                if (step === 3) {
+                    if (currentChartInstance.current) {
+                        currentChartInstance.current.destroy();
+                    }
+                    if (idealChartInstance.current) {
+                        idealChartInstance.current.destroy();
+                    }
+
+                    const current = getCurrentAllocation();
+                    const ideal = getIdealAllocation();
+                    currentChartInstance.current = createPieChart(currentChartRef, current, 'Your Current Portfolio');
+                    idealChartInstance.current = createPieChart(idealChartRef, ideal, `ILAB Target (${netWorthRange === '1m-5m' ? '$1M-$5M' : netWorthRange === '5m-10m' ? '$5M-$10M' : '$10M+'})`);
+                }
+            }, [step, portfolio]);
+
+            const total = calculateTotalValue();
+            const differences = calculateDifferences();
+            const recommended = getRecommendedAmounts();
+            const ideal = getIdealAllocation();
+            const requiredCash = calculateRequiredCash();
+            const currentCash = parseFloat(portfolio['Cash']) || 0;
+
+            return (
+                <div className="min-h-screen py-8 px-4">
+                    {/* Header */}
+                    <div className="bg-card border-2 border-gold text-white py-12 px-6 rounded-2xl mb-8 max-w-6xl mx-auto shadow-2xl">
+                        <h1 className="text-5xl font-bold mb-3">Invest Like A <span className="text-gold">Billionaire</span></h1>
+                        <p className="text-xl text-white opacity-90">Portfolio Analyzer - Optimize Your Wealth Strategy</p>
+                    </div>
+
+                    <div className="max-w-6xl mx-auto">
+                        {step === 1 ? (
+                            /* Step 1: Profile & Liquidity Assessment */
+                            <div className="bg-card rounded-2xl card-shadow p-8 fade-in border-2 border-gold">
+                                <h2 className="text-3xl font-bold text-gold mb-2">Step 1: Your Financial Profile</h2>
+                                <p className="text-white mb-8">Help us understand your situation to provide tailored recommendations</p>
+                                
+                                <div className="space-y-6">
+                                    {/* Net Worth Range */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-white mb-3">
+                                            What is your current net worth range?
+                                        </label>
+                                        <div className="grid md:grid-cols-3 gap-4">
+                                            {[
+                                                { value: '1m-5m', label: '$1M - $5M' },
+                                                { value: '5m-10m', label: '$5M - $10M' },
+                                                { value: '10m+', label: '$10M+' }
+                                            ].map(option => (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => setNetWorthRange(option.value)}
+                                                    className={`py-4 px-6 rounded-lg font-semibold transition-all border-2 ${
+                                                        netWorthRange === option.value
+                                                            ? 'bg-gold text-black border-gold shadow-lg'
+                                                            : 'bg-transparent text-white border-white/30 hover:border-gold hover:shadow-md'
+                                                    }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Monthly Expenses */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-white mb-2">
+                                            What are your monthly living expenses?
+                                        </label>
+                                        <p className="text-xs text-white/70 mb-3">This helps determine your optimal cash reserves</p>
+                                        <div className="relative">
+                                            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/70 font-medium">$</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="100"
+                                                value={monthlyExpenses}
+                                                onChange={(e) => setMonthlyExpenses(e.target.value)}
+                                                className="w-full pl-8 pr-4 py-3 bg-white/10 border-2 border-white/30 rounded-lg input-focus transition-all text-white placeholder-white/50"
+                                                placeholder="10,000"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Emergency Fund Months */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-white mb-2">
+                                            How many months of expenses do you want in emergency reserves?
+                                        </label>
+                                        <select
+                                            value={emergencyMonths}
+                                            onChange={(e) => setEmergencyMonths(e.target.value)}
+                                            className="w-full px-4 py-3 bg-white/10 border-2 border-white/30 rounded-lg input-focus transition-all text-white"
+                                        >
+                                            <option value="3" className="bg-blue-900">3 months</option>
+                                            <option value="6" className="bg-blue-900">6 months (recommended)</option>
+                                            <option value="12" className="bg-blue-900">12 months</option>
+                                            <option value="24" className="bg-blue-900">24 months</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Credit Lines */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-white mb-2">
+                                            Available credit lines (optional)
+                                        </label>
+                                        <p className="text-xs text-white/70 mb-3">HELOCs, business lines of credit, etc. that can cover emergencies</p>
+                                        <div className="relative">
+                                            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/70 font-medium">$</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1000"
+                                                value={creditLineAvailable}
+                                                onChange={(e) => setCreditLineAvailable(e.target.value)}
+                                                className="w-full pl-8 pr-4 py-3 bg-white/10 border-2 border-white/30 rounded-lg input-focus transition-all text-white placeholder-white/50"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Calculated Cash Need */}
+                                    {monthlyExpenses && (
+                                        <div className="bg-white/10 border-2 border-gold rounded-lg p-4">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-white font-medium">Recommended Cash Reserves:</span>
+                                                <span className="text-3xl font-bold text-gold">
+                                                    ${Math.round(calculateRequiredCash()).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-white/70 mt-2">
+                                                {emergencyMonths} months expenses (${(parseFloat(monthlyExpenses) * parseFloat(emergencyMonths)).toLocaleString()})
+                                                {creditLineAvailable && parseFloat(creditLineAvailable) > 0 && 
+                                                    ` - ${parseFloat(creditLineAvailable).toLocaleString()} credit line`
+                                                }
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-8">
+                                    <button
+                                        onClick={proceedToPortfolioInput}
+                                        className="w-full bg-gold text-black py-4 rounded-lg font-bold text-lg hover:opacity-90 transition-all transform hover:scale-105 shadow-lg"
+                                    >
+                                        Continue to Portfolio Input →
+                                    </button>
+                                </div>
+                            </div>
+                        ) : step === 2 ? (
+                            /* Step 2: Portfolio Input */
+                            <div className="bg-card rounded-2xl card-shadow p-8 fade-in border-2 border-gold">
+                                <div className="flex justify-between items-center mb-6">
+                                    <div>
+                                        <h2 className="text-3xl font-bold text-gold mb-2">Step 2: Enter Your Current Portfolio</h2>
+                                        <p className="text-white">Input the dollar amount in each asset category</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setStep(1)}
+                                        className="text-white hover:text-gold transition-colors font-medium"
+                                    >
+                                        ← Back
+                                    </button>
+                                </div>
+                                
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    {Object.keys(portfolio).map(category => {
+                                        const targetPct = ideal[category] || 0;
+                                        return (
+                                            <div key={category}>
+                                                <label className="block text-sm font-semibold text-white mb-2">
+                                                    {category}
+                                                    {targetPct > 0 && (
+                                                        <span className="text-white/70 font-normal ml-2">(Target: {targetPct}%)</span>
+                                                    )}
+                                                </label>
+                                                <div className="relative">
+                                                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/70 font-medium">$</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={portfolio[category]}
+                                                        onChange={(e) => handleInputChange(category, e.target.value)}
+                                                        className="w-full pl-8 pr-4 py-3 bg-white/10 border-2 border-white/30 rounded-lg input-focus transition-all text-white placeholder-white/50"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="mt-8 pt-6 border-t-2 border-white/20">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <span className="text-xl font-semibold text-white">Total Portfolio Value:</span>
+                                        <span className="text-4xl font-bold text-gold">${total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                    </div>
+                                    
+                                    {/* Cash Check */}
+                                    {monthlyExpenses && currentCash < requiredCash && (
+                                        <div className="bg-orange-500/20 border-2 border-orange-400 rounded-lg p-4 mb-6">
+                                            <p className="text-orange-200 text-sm font-medium">
+                                                ⚠️ Your cash reserves (${currentCash.toLocaleString()}) are below the recommended ${Math.round(requiredCash).toLocaleString()}
+                                            </p>
+                                        </div>
+                                    )}
+                                    
+                                    <button
+                                        onClick={analyzePortfolio}
+                                        className="w-full bg-gold text-black py-4 rounded-lg font-bold text-lg hover:opacity-90 transition-all transform hover:scale-105 shadow-lg"
+                                    >
+                                        Analyze My Portfolio →
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            /* Step 3: Results View */
+                            <div className="space-y-8 fade-in">
+                                {/* Charts */}
+                                <div className="grid md:grid-cols-2 gap-8">
+                                    <div className="bg-card rounded-2xl card-shadow p-6 border-2 border-gold">
+                                        <div className="chart-container">
+                                            <canvas ref={currentChartRef}></canvas>
+                                        </div>
+                                    </div>
+                                    <div className="bg-card rounded-2xl card-shadow p-6 border-2 border-gold">
+                                        <div className="chart-container">
+                                            <canvas ref={idealChartRef}></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Liquidity Status */}
+                                {monthlyExpenses && (
+                                    <div className={`bg-card rounded-2xl card-shadow p-6 border-2 ${
+                                        currentCash >= requiredCash 
+                                            ? 'border-green-400' 
+                                            : 'border-orange-400'
+                                    }`}>
+                                        <h3 className="text-2xl font-bold mb-4 text-gold">Liquidity Assessment</h3>
+                                        <div className="grid md:grid-cols-3 gap-4 text-sm">
+                                            <div>
+                                                <p className="text-white/70 mb-1">Current Cash</p>
+                                                <p className="text-3xl font-bold text-white">${currentCash.toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-white/70 mb-1">Recommended</p>
+                                                <p className="text-3xl font-bold text-white">${Math.round(requiredCash).toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-white/70 mb-1">Status</p>
+                                                <p className={`text-3xl font-bold ${currentCash >= requiredCash ? 'text-green-400' : 'text-orange-400'}`}>
+                                                    {currentCash >= requiredCash ? '✓ Adequate' : '⚠️ Below Target'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Detailed Comparison */}
+                                <div className="bg-card rounded-2xl card-shadow p-8 border-2 border-gold">
+                                    <h2 className="text-3xl font-bold text-gold mb-6">Allocation Analysis</h2>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="border-b-2 border-white/20">
+                                                    <th className="text-left py-3 px-4 font-semibold text-gold">Category</th>
+                                                    <th className="text-right py-3 px-4 font-semibold text-gold">Current</th>
+                                                    <th className="text-right py-3 px-4 font-semibold text-gold">Target</th>
+                                                    <th className="text-right py-3 px-4 font-semibold text-gold">Difference</th>
+                                                    <th className="text-right py-3 px-4 font-semibold text-gold">Action Needed</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {Object.keys(ideal).filter(cat => ideal[cat] > 0).map(category => {
+                                                    const current = getCurrentAllocation();
+                                                    const currentPct = current[category] || 0;
+                                                    const targetPct = ideal[category];
+                                                    const diff = differences[category];
+                                                    const rec = recommended[category];
+                                                    
+                                                    return (
+                                                        <tr key={category} className="border-b border-white/10 hover:bg-white/5">
+                                                            <td className="py-4 px-4">
+                                                                <div className="flex items-center">
+                                                                    <div 
+                                                                        className="w-4 h-4 rounded-full mr-3" 
+                                                                        style={{backgroundColor: CATEGORY_COLORS[category]}}
+                                                                    ></div>
+                                                                    <span className="font-medium text-white">{category}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="text-right py-4 px-4 text-white">
+                                                                {currentPct.toFixed(1)}%
+                                                                <div className="text-sm text-white/60">${rec.current.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                                                            </td>
+                                                            <td className="text-right py-4 px-4 text-white">
+                                                                {targetPct}%
+                                                                <div className="text-sm text-white/60">${rec.ideal.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                                                            </td>
+                                                            <td className={`text-right py-4 px-4 font-semibold ${diff > 5 ? 'text-orange-400' : diff < -5 ? 'text-blue-400' : 'text-green-400'}`}>
+                                                                {diff > 0 ? '+' : ''}{diff.toFixed(1)}%
+                                                            </td>
+                                                            <td className={`text-right py-4 px-4 font-medium ${rec.difference > 0 ? 'text-blue-400' : rec.difference < 0 ? 'text-orange-400' : 'text-green-400'}`}>
+                                                                {rec.difference > 0 ? 'Add ' : rec.difference < 0 ? 'Reduce ' : 'Hold '}
+                                                                ${Math.abs(rec.difference).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* AI Recommendations */}
+                                <div className="bg-card rounded-2xl card-shadow p-8 border-2 border-gold">
+                                    <h2 className="text-3xl font-bold text-gold mb-4">AI-Powered Recommendations</h2>
+                                    
+                                    {!aiRecommendations ? (
+                                        <div className="text-center py-8">
+                                            <p className="text-white mb-6">Get personalized guidance on optimizing your portfolio using the ILAB framework.</p>
+                                            <button
+                                                onClick={generateAIRecommendations}
+                                                disabled={isGeneratingAI}
+                                                className="bg-gold text-black px-8 py-3 rounded-lg font-bold hover:opacity-90 transition-all disabled:opacity-50 shadow-lg"
+                                            >
+                                                {isGeneratingAI ? 'Generating Recommendations...' : 'Get AI Recommendations'}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="prose max-w-none">
+                                            <div className="bg-white/10 rounded-lg p-6 text-white whitespace-pre-wrap border-2 border-white/20">
+                                                {aiRecommendations}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Reset Button */}
+                                <div className="text-center">
+                                    <button
+                                        onClick={() => {
+                                            setStep(1);
+                                            setAiRecommendations('');
+                                        }}
+                                        className="bg-white/10 hover:bg-white/20 text-white border-2 border-white/30 px-6 py-3 rounded-lg font-semibold transition-all shadow-lg"
+                                    >
+                                        ← Start New Analysis
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="max-w-6xl mx-auto mt-12 text-center text-white text-sm">
+                        <p className="font-medium">Based on the "Invest Like A Billionaire" framework by Bob and Ben Fraser</p>
+                        <p className="mt-2 opacity-80">This tool provides educational information. It does not constitute financial advice.</p>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<PortfolioAnalyzer />);
+    </script>
+</body>
+</html>
